@@ -1,4 +1,6 @@
 from scipy.stats import chi2, chi2_contingency, pearsonr
+from sklearn.tree import DecisionTreeClassifier,DecisionTreeRegressor
+
 
 ## Calculates iv values
 ##
@@ -88,7 +90,7 @@ class iv_splitter():
     
     ##  Merging based on monotonic relationship
     ##
-    def MonoMerge (self):
+    def MonoMerge (self, verbose = False):
 
         x = spl_iv.col_dt
         y = spl_iv.target
@@ -108,13 +110,14 @@ class iv_splitter():
             x_mean.append(np.mean(x[filt]))
             y_mean.append(np.mean(y[filt]))
 
-            ## print (a,b,sum(filt),np.mean(x[filt]),np.mean(y[filt]))
+            if verbose:
+                print (a,b,sum(filt),np.mean(x[filt]),np.mean(y[filt]))
 
 
         key_finish = False
         eps = 0.001
         while not key_finish and len(bins)>3:
-           max_corr_old = abs(pearsonr(x_mean,y_mean)[0])
+            max_corr_old = abs(pearsonr(x_mean,y_mean)[0])
             max_corr = max_corr_old
             for i in range(1,len(bins)-1):
 
@@ -138,7 +141,7 @@ class iv_splitter():
                     i = i - 1
 
             if (max_corr>max_corr_old):
-               x_mean = max_x_mean
+                x_mean = max_x_mean
                 y_mean = max_y_mean
                 cnt_sum = max_cnt_sum
                 bins = new_bins
@@ -151,6 +154,58 @@ class iv_splitter():
         self.coarse_bins = bins
         return 0
 
+    
+    ##  Get bining devision based on tree model
+    ##
+    def tree_optimize(self, criterion=None, fix_depth=None, qnt_num=10, 
+                      max_depth=None, cv=3, min_samples_leaf=50):
+            """
+            WoE bucketing optimization (continuous variables only)
+            :param criterion: binary tree split criteria
+            :param fix_depth: use tree of a fixed depth (2^fix_depth buckets)
+            :param qnt_num: number of quantiles
+            :param max_depth: maximum tree depth for a optimum cross-validation search
+            :param cv: number of cv buckets
+            :param scoring: scorer for cross_val_score
+            :param min_samples_leaf: minimum number of observations in each of optimized buckets
+            :return: WoE class with optimized continuous variable split
+
+            __author__ = 'Denis Surzhko'
+            """
+
+            tree_type = DecisionTreeClassifier
+            m_depth = int(np.log2(qnt_num)) + 1 if max_depth is None else max_depth
+
+            x_train = pd.DataFrame(self.col_dt)
+            y_train = self.target
+
+            print (m_depth)
+            
+            start = 1
+            cv_scores = []
+            if fix_depth is None:
+                for i in range(start, m_depth):
+                    if criterion is None:
+                        d_tree = tree_type(max_depth=i, min_samples_leaf=min_samples_leaf)
+                    else:
+                        d_tree = tree_type(criterion=criterion, max_depth=i, min_samples_leaf=min_samples_leaf)
+
+                    scores = cross_val_score(d_tree, x_train, y_train, cv=cv, scoring = 'roc_auc')
+                    cv_scores.append(scores.mean())
+                    print (i, scores)
+                best = np.argmax(cv_scores) + start
+            else:
+                best = fix_depth
+            final_tree = tree_type(max_depth=best, min_samples_leaf=min_samples_leaf)
+            final_tree.fit(x_train, y_train)
+            opt_bins = final_tree.tree_.threshold[final_tree.tree_.feature >= 0]
+            
+            opt_bins = np.append(opt_bins,[max(x_train.values),min(x_train.values)-0.00001])
+            opt_bins = np.sort(opt_bins)
+            
+            self.bins = list(opt_bins)
+
+    
     def get_iv_bins(self, bins = None):
         
         if not bins:
@@ -181,13 +236,3 @@ class iv_splitter():
             self.bins_gd_perc.append(bin_gd_perc)
             self.bins_woe.append(bin_woe)
             self.bins_vi.append(bin_vi)
-            
-            ##print (i,self.bins[i],self.bins[i+1],bin_bd_perc,bin_gd_perc,bin_woe,bin_vi)
-            
-        ##print (self.bins_vi)
-    
-## target_var = 'lbt_inf_total_qty'
-## target_var = 'srv_mb_1st_txn_ever_dt'
-## target_var = 'lbt_payroll_min_dt'
-## target_var = 'lne_tot_issued_ever_rub_amt'
-
