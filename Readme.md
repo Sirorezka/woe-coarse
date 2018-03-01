@@ -1,4 +1,4 @@
-Package calculates WOE and IV for scoring models. Main reason to make this package was to create functions that will allow to create SAS style coarse groups during binarization. So basically package allows to get optimal bining for scoring models.
+Package calculates WOE and IV for scoring models. Main reason to make this package was to create functions that will allow to create SAS style coarse groups during binarization. So basically package allows to get optimal bining for scoring models. Package orginized in scikit style. You should 'initialize', 'fit' model and then 'transpose'
 
 Currently there are following methods:
 
